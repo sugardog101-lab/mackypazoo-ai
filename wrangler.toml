@@ -1,0 +1,11 @@
+name = "mackypazoo-ai"
+main = "src/worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+YOUTUBE_HANDLE = "MACKYPAZOO"
+
+[[rules]]
+type = "Text"
+globs = ["**/*.html"]
+fallthrough = true
