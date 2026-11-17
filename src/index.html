@@ -23,32 +23,36 @@ async function copyPrompt(){try{await navigator.clipboard.writeText($('#prompt')
 
 $('#videos').addEventListener('click',e=>{const b=e.target.closest('[data-id]');if(b){const v=items.find(x=>x.id===b.dataset.id);if(v)openVideo(v)}});$('#search').addEventListener('input',render);$('#reload').onclick=()=>load(true);$('#manualBtn').onclick=()=>{const id=idFrom($('#manual').value.trim());if(!valid(id)){alert('正しいYouTube動画URLを入力してください');return}openVideo({id,title:'YouTube動画 '+id})};$('#close').onclick=()=>$('#dlg').close();$('#copy').onclick=copyPrompt;load(true);
 
-const diagramInstructions=`先ほどのバドミントン試合分析から、映像で位置を確認できた重要場面を最大3つ選び、以下のJSON形式だけで図解データを出力してください。画像やMarkdownの説明文は不要です。
-座標はコートの左上が(0,0)、右下が(100,100)。ネットはy=50、相手コートはy=0～49、味方コートはy=51～100です。
-各場面に味方A・Bを各1人（yは55～95）、相手C・Dを各1人（yは5～45）置いてください。移動先も同じ側に限定してください。位置を映像で確認できない場合はその場面を出力しないでください。
-JSON形式：{"diagrams":[{"time":"00:21","title":"左右の守備","type":"観察図","players":{"A":[25,78],"B":[75,78],"C":[25,22],"D":[75,22]},"moves":[{"player":"A","to":[35,75]}],"shots":[{"from":[75,22],"to":[35,75]}],"note":"位置関係を確認できた場合だけ記載"}]}
-playersは必ずA/B/C/Dの4人だけ。movesは選手の移動、shotsはシャトルの軌道。配列は省略可能。時刻は実際に確認した時刻のみ。「提案図」の場合はtypeを「提案図」とし、実映像の再現ではないとnoteに記載してください。実際に確認できない座標を事実として捏造しないでください。`;
+const diagramInstructions=`先ほどのバドミントン試合分析から、位置を映像で確認できた重要場面を最大3つ選び、以下のJSON形式だけで図解データを出力してください。Markdownや画像は不要です。
+コートは真上から見た縦長の長方形。ネットは水平でy=50、相手コートは上側（y=0～49）、味方コートは下側（y=51～100）。左上が(0,0)、右下が(100,100)です。
+味方A/Bはy=55～95、相手C/Dはy=5～45に各1人。移動先も同じ側。確認できない位置を想像で事実として描かないでください。
+【重要】1枚の図は1つの戦術だけに絞り、矢印は原則1～2本、最大3本まで。全ラリーのショットを1枚に詰め込まないでください。守備の切替なら選手の移動を優先、配球の説明ならシャトルの軌道を優先してください。
+JSON例：{"diagrams":[{"time":"00:21","title":"左右の守備","type":"観察図","players":{"A":[25,78],"B":[75,78],"C":[25,22],"D":[75,22]},"moves":[{"player":"A","to":[35,75]}],"shots":[],"note":"確認できた位置関係の説明"}]}
+playersは必ずA/B/C/D各1人。movesは選手の移動、shotsはシャトルの軌道。両方とも空配列にできます。
+「改善前」「改善後」を比較する場合は別々のdiagrams要素にし、同じ時刻・場面名を使ってください。改善後のtypeは「提案図」、noteは「実映像の再現ではない」としてください。映像で確認できない場合は観察図を出力しないでください。`;
 const exampleDiagram={diagrams:[{time:"例",title:"左右の守備配置",type:"提案図",players:{A:[28,77],B:[72,77],C:[30,24],D:[70,24]},moves:[{player:"A",to:[23,70]},{player:"B",to:[77,70]}],shots:[{from:[70,24],to:[23,70]}],note:"サンプル配置。実際の動画を再現したものではありません。"}]};
 const validPoint=(p,side)=>Array.isArray(p)&&p.length===2&&p.every(v=>typeof v==='number'&&Number.isFinite(v)&&v>=0&&v<=100)&&(!side||(side==='own'?p[1]>=52&&p[1]<=98:p[1]>=2&&p[1]<=48));
 function svgEl(tag,attrs={},content){const el=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v] of Object.entries(attrs))el.setAttribute(k,String(v));if(content!==undefined)el.textContent=content;return el}
 function courtDiagram(d){
  const players=d.players;if(!players||Object.keys(players).sort().join('')!=='ABCD')throw Error('選手はA・B・C・Dの4人を指定してください');
  for(const name of ['A','B','C','D'])if(!validPoint(players[name],name==='A'||name==='B'?'own':'opponent'))throw Error(name+'の座標がコート外または相手側です');
- const box=document.createElement('article');box.className='diagram-card';const h=document.createElement('h3');h.textContent=(d.time||'時刻不明')+' '+(d.title||'コート図')+' ｜ '+(d.type||'観察図');box.append(h);
- const svg=svgEl('svg',{viewBox:'0 0 560 440',class:'court-svg',role:'img','aria-label':'バドミントンのコート配置図'});
+ const box=document.createElement('article');box.className='diagram-card';const h=document.createElement('h3');h.textContent=(d.time||'時刻不明')+' '+(d.title||'コート図')+' ｜ '+(d.type||'観察図');box.append(h);if(d.type==='提案図'&&!String(d.note||'').includes('実映像の再現ではない'))d={...d,note:(d.note?d.note+' ／ ':'')+'提案図（実映像の再現ではない）'};
+ const svg=svgEl('svg',{viewBox:'0 0 440 560',class:'court-svg',role:'img','aria-label':'上側が相手、下側が味方のバドミントンコート配置図'});
  const add=(tag,attrs,content)=>{const el=svgEl(tag,attrs,content);svg.append(el);return el};
- const x=p=>40+p[0]*4.8,y=p=>32+p[1]*3.6;
- add('rect',{x:40,y:32,width:480,height:360,fill:'#198b58',rx:3});
- add('rect',{x:52,y:44,width:456,height:336,fill:'none',stroke:'white','stroke-width':2});
- add('line',{x1:280,y1:44,x2:280,y2:380,stroke:'white','stroke-width':1.5});
- for(const py of [78,155,269,346])add('line',{x1:52,y1:py,x2:508,y2:py,stroke:'white','stroke-width':1.4});
- add('line',{x1:40,y1:212,x2:520,y2:212,stroke:'#f5f7fa','stroke-width':5});
- add('text',{x:46,y:23,fill:'#163c33','font-size':14},'相手コート');
- add('text',{x:46,y:414,fill:'#163c33','font-size':14},'味方コート');
- const arrow=(from,to,color,dash)=>{const ax=x(from),ay=y(from),bx=x(to),by=y(to),ang=Math.atan2(by-ay,bx-ax),ex=bx-18*Math.cos(ang),ey=by-18*Math.sin(ang);add('line',{x1:ax,y1:ay,x2:ex,y2:ey,stroke:color,'stroke-width':3,'stroke-dasharray':dash?'7 5':'none'});add('path',{d:'M '+ex+' '+ey+' L '+(ex-12*Math.cos(ang-.5))+' '+(ey-12*Math.sin(ang-.5))+' L '+(ex-12*Math.cos(ang+.5))+' '+(ey-12*Math.sin(ang+.5))+' Z',fill:color})};
- for(const m of (Array.isArray(d.moves)?d.moves:[]).slice(0,8)){if(!players[m.player]||!validPoint(m.to,['A','B'].includes(m.player)?'own':'opponent'))throw Error('選手移動の座標が不正です');arrow(players[m.player],m.to,'#ffffff',true)}
- for(const shot of (Array.isArray(d.shots)?d.shots:[]).slice(0,8)){if(!validPoint(shot.from)||!validPoint(shot.to))throw Error('シャトルの座標が不正です');arrow(shot.from,shot.to,'#ffdc45',false)}
- for(const name of ['A','B','C','D']){const p=players[name],cx=x(p),cy=y(p);add('circle',{cx,cy,r:17,fill:['A','B'].includes(name)?'#5db9ff':'#ffdc45',stroke:'#103747','stroke-width':1.5});add('text',{x:cx,y:cy+5,'text-anchor':'middle',fill:'#0d2936','font-size':16,'font-weight':800},name)}
+ const x=p=>48+p[0]*3.44,y=p=>46+p[1]*4.64;
+ add('rect',{x:48,y:46,width:344,height:464,fill:'#198b58',rx:3});
+ add('rect',{x:60,y:58,width:320,height:440,fill:'none',stroke:'white','stroke-width':2});
+ add('line',{x1:220,y1:58,x2:220,y2:498,stroke:'white','stroke-width':1.5});
+ for(const py of [108,218,338,448])add('line',{x1:60,y1:py,x2:380,y2:py,stroke:'white','stroke-width':1.4});
+ add('line',{x1:48,y1:278,x2:392,y2:278,stroke:'#f5f7fa','stroke-width':5});
+ add('text',{x:220,y:30,fill:'#163c33','font-size':17,'text-anchor':'middle','font-weight':700},'相手コート');
+ add('text',{x:220,y:539,fill:'#163c33','font-size':17,'text-anchor':'middle','font-weight':700},'味方コート');
+ const arrow=(from,to,color,dash)=>{const ax=x(from),ay=y(from),bx=x(to),by=y(to),ang=Math.atan2(by-ay,bx-ax),ex=bx-19*Math.cos(ang),ey=by-19*Math.sin(ang);add('line',{x1:ax,y1:ay,x2:ex,y2:ey,stroke:color,'stroke-width':3,'stroke-dasharray':dash?'7 5':'none'});add('path',{d:'M '+ex+' '+ey+' L '+(ex-12*Math.cos(ang-.5))+' '+(ey-12*Math.sin(ang-.5))+' L '+(ex-12*Math.cos(ang+.5))+' '+(ey-12*Math.sin(ang+.5))+' Z',fill:color})};
+ const moves=Array.isArray(d.moves)?d.moves:[],shots=Array.isArray(d.shots)?d.shots:[];
+ if(moves.length+shots.length>3)throw Error('1つの図の矢印は最大3本です。Geminiに1つの戦術だけを選んで再出力させてください');
+ for(const m of moves){if(!players[m.player]||!validPoint(m.to,['A','B'].includes(m.player)?'own':'opponent'))throw Error('選手移動の座標が不正です');arrow(players[m.player],m.to,'#ffffff',true)}
+ for(const shot of shots){if(!validPoint(shot.from)||!validPoint(shot.to))throw Error('シャトルの座標が不正です');arrow(shot.from,shot.to,'#ffdc45',false)}
+ for(const name of ['A','B','C','D']){const p=players[name],cx=x(p),cy=y(p);add('circle',{cx,cy,r:16,fill:['A','B'].includes(name)?'#5db9ff':'#ffdc45',stroke:'#103747','stroke-width':1.5});add('text',{x:cx,y:cy+5,'text-anchor':'middle',fill:'#0d2936','font-size':16,'font-weight':800},name)}
  box.append(svg);const legend=document.createElement('p');legend.className='diagram-note';legend.textContent='🔵 味方A・B　🟡 相手C・D　黄色実線：シャトル　白破線：選手移動';box.append(legend);
  if(d.note){const note=document.createElement('p');note.className='diagram-note';note.textContent=d.note;box.append(note)}return box;
 }
